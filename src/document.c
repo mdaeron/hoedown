@@ -79,6 +79,7 @@ static size_t char_autolink_www(hoedown_buffer *ob, hoedown_document *doc, uint8
 static size_t char_link(hoedown_buffer *ob, hoedown_document *doc, uint8_t *data, size_t offset, size_t size);
 static size_t char_image(hoedown_buffer *ob, hoedown_document *doc, uint8_t *data, size_t offset, size_t size);
 static size_t char_superscript(hoedown_buffer *ob, hoedown_document *doc, uint8_t *data, size_t offset, size_t size);
+static size_t char_subscript(hoedown_buffer *ob, hoedown_document *doc, uint8_t *data, size_t offset, size_t size);
 static size_t char_math(hoedown_buffer *ob, hoedown_document *doc, uint8_t *data, size_t offset, size_t size);
 
 enum markdown_char_t {
@@ -95,6 +96,7 @@ enum markdown_char_t {
 	MD_CHAR_AUTOLINK_EMAIL,
 	MD_CHAR_AUTOLINK_WWW,
 	MD_CHAR_SUPERSCRIPT,
+	MD_CHAR_SUBSCRIPT,
 	MD_CHAR_QUOTE,
 	MD_CHAR_MATH
 };
@@ -113,6 +115,7 @@ static char_trigger markdown_char_ptrs[] = {
 	&char_autolink_email,
 	&char_autolink_www,
 	&char_superscript,
+	&char_subscript,
 	&char_quote,
 	&char_math
 };
@@ -1363,6 +1366,42 @@ char_superscript(hoedown_buffer *ob, hoedown_document *doc, uint8_t *data, size_
 	sup = newbuf(doc, BUFFER_SPAN);
 	parse_inline(sup, doc, data + sup_start, sup_len - sup_start);
 	doc->md.superscript(ob, sup, &doc->data);
+	popbuf(doc, BUFFER_SPAN);
+
+	return (sup_start == 2) ? sup_len + 1 : sup_len;
+}
+
+static size_t
+char_subscript(hoedown_buffer *ob, hoedown_document *doc, uint8_t *data, size_t offset, size_t size)
+{
+	size_t sup_start, sup_len;
+	hoedown_buffer *sup;
+
+	if (!doc->md.subscript)
+		return 0;
+
+	if (size < 2)
+		return 0;
+
+	if (data[1] == '(') {
+		sup_start = 2;
+		sup_len = find_emph_char(data + 2, size - 2, ')') + 2;
+
+		if (sup_len == size)
+			return 0;
+	} else {
+		sup_start = sup_len = 1;
+
+		while (sup_len < size && !_isspace(data[sup_len]))
+			sup_len++;
+	}
+
+	if (sup_len - sup_start == 0)
+		return (sup_start == 2) ? 3 : 0;
+
+	sup = newbuf(doc, BUFFER_SPAN);
+	parse_inline(sup, doc, data + sup_start, sup_len - sup_start);
+	doc->md.subscript(ob, sup, &doc->data);
 	popbuf(doc, BUFFER_SPAN);
 
 	return (sup_start == 2) ? sup_len + 1 : sup_len;
@@ -2840,6 +2879,7 @@ hoedown_document_new(
 
 	if (extensions & HOEDOWN_EXT_SUPERSCRIPT)
 		doc->active_char['^'] = MD_CHAR_SUPERSCRIPT;
+		doc->active_char['~'] = MD_CHAR_SUBSCRIPT;
 
 	if (extensions & HOEDOWN_EXT_QUOTE)
 		doc->active_char['"'] = MD_CHAR_QUOTE;
